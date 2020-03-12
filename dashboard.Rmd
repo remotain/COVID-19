@@ -1,0 +1,200 @@
+---
+title: "COVID-19 Global Data"
+date: '`r format(Sys.Date(), "%d %B %Y")`'
+output: 
+  flexdashboard::flex_dashboard:
+    theme: bootstrap
+    orientation: rows
+    navbar:
+      - { title: "Data Source", href: "https://github.com/CSSEGISandData/COVID-19", icon: "fa-github", align: right }
+runtime: shiny
+---
+
+```{bash, include=FALSE}
+cd COVID-19 && git pull
+```
+
+```{r global, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+library(flexdashboard)
+library(tidyverse)
+library(plotly)
+library(leaflet)
+library(maps)
+#
+setwd("~/Work/COVID-19/")
+#
+# Load Data Set for confirmed Cases
+time_series_19_covid_Confirmed <- read_csv("COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv")
+# Tidy data
+time_series_19_covid_Confirmed <- time_series_19_covid_Confirmed %>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
+# Add Features
+time_series_19_covid_Confirmed <- time_series_19_covid_Confirmed %>% mutate(`Case type`= "Confirmed")
+#
+#
+# Load Data Set for Recovered Cases
+time_series_19_covid_Recovered <- read_csv("COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv")
+# Tidy data
+time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
+# Add Features
+time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% mutate(`Case type` = "Recovered")
+#
+#
+# Load Data Set for Deaths Cases
+time_series_19_covid_Deaths <- read_csv("COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv")
+# Tidy data
+time_series_19_covid_Deaths<- time_series_19_covid_Deaths%>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
+# Add Features
+time_series_19_covid_Deaths <- time_series_19_covid_Deaths %>% mutate(`Case type` = "Deaths")
+#
+#
+# Merge Confirmed, Recovered, Deaths
+time_series_19_covid <- bind_rows(time_series_19_covid_Confirmed ,time_series_19_covid_Recovered, time_series_19_covid_Deaths ) %>% mutate(Date = as.Date(Date, format = '%m/%d/%y'))
+#
+#
+# Change US to USA
+time_series_19_covid$`Country/Region`[time_series_19_covid$`Country/Region` == 'US'] <- "USA"
+#
+#
+# Unique coords per country (capital)
+library(maps)
+country_coords <- world.cities %>% 
+  filter(capital == 1) %>%
+  select(country = country.etc, lat, lng = long)
+#
+#
+# Data summary per country
+data_summary_per_country <- time_series_19_covid %>% 
+  filter(Date == max(Date)) %>% 
+  group_by(`Country/Region`, `Case type`) %>% 
+  summarize(sum(Cases)) %>% 
+  pivot_wider(names_from = `Case type`, values_from = `sum(Cases)`) %>%
+  left_join(., country_coords, by = c("Country/Region"="country"))
+#
+#
+# Summary totals
+summary_totals<-time_series_19_covid %>% filter(Date == max(Date)) %>% group_by(`Case type`) %>% summarize(sum(Cases))
+
+```
+
+Overview
+=====================================  
+
+Row
+-------------------------------------
+
+### Confirmed
+```{r}
+valueBox(summary_totals %>% filter(`Case type` == "Confirmed") %>% select(`sum(Cases)`), icon = "fa-stethoscope", color="#f39c12")
+```
+
+### Recovered
+```{r}
+valueBox(summary_totals %>% filter(`Case type` == "Recovered") %>% select(`sum(Cases)`), icon = "fa-smile", color=" #27ae60 ")
+```
+
+### Deaths
+```{r}
+valueBox(summary_totals %>% filter(`Case type` == "Deaths") %>% select(`sum(Cases)`), icon = "fa-sad-tear", color='red')
+```
+
+Row
+-------------------------------------
+
+###
+```{r}
+mytext <- paste("Country: ", data_summary_per_country$`Country/Region`, "<br/>", "Confirmed: ", data_summary_per_country$`Confirmed`, "<br/>", "Recovered: ", data_summary_per_country$`Recovered`, "<br/>", "Deaths: ", data_summary_per_country$`Deaths`, sep="") %>%
+  lapply(htmltools::HTML)
+
+## leaflet map
+output$map<-renderLeaflet({ 
+  data_summary_per_country %>% leaflet() %>% addTiles() %>% 
+  addProviderTiles("OpenStreetMap.Mapnik") %>%
+  addCircleMarkers(lat=~`lat`, lng =~`lng`, radius=~5*log10(`Confirmed`), layerId = ~unique(`Country/Region`), stroke=FALSE, label = mytext)
+  })
+
+leafletOutput("map")
+
+```
+
+Countries
+=====================================  
+
+Row
+-------------------------------------
+
+###
+
+```{r}
+# Table with count per countries
+tab <- time_series_19_covid %>% filter(Date == max(Date)) %>% group_by(`Country/Region`, `Case type`) %>% summarize(sum(Cases)) %>% pivot_wider(names_from = `Case type`, values_from = `sum(Cases)`) %>% arrange(desc(`Confirmed`))
+
+DT::DTOutput("tab")
+
+output$tab<-DT::renderDT(tab,server=TRUE, selection = 'single', options = list(pageLength = 15, lengthMenu = c(15)))
+```
+
+###
+
+```{r}
+# Reactive based on the row selected in the previous table
+g <- reactive({
+
+    if ( is_null(input$tab_rows_selected) ){
+      time_series_19_covid %>% group_by(Date, `Case type`) %>% summarise(sum(Cases)) %>% ggplot(aes(x=Date, y=`sum(Cases)`, color=`Case type`)) + geom_line() + geom_point(size=2) + ylab("Cases") + scale_color_manual(values=c("#f39c12", "red", "#52be80")) + theme(legend.title = element_blank(), legend.position = "none")
+    } else {
+      filter_country <- tab[input$tab_rows_selected, ]$`Country/Region`
+      
+      time_series_19_covid %>% filter(`Country/Region` == filter_country) %>% group_by(Date, `Case type`) %>% summarise(sum(Cases)) %>% ggplot(aes(x=Date, y=`sum(Cases)`, color=`Case type`)) + geom_line() + geom_point(size=2) + ylab("Cases") + scale_color_manual(values=c("#f39c12", "red", "#52be80"))+theme(legend.title = element_blank(), legend.position = "none")
+    }
+})
+
+renderPlotly({g()})
+
+#renderPrint({c(input$tab_rows_selected)})
+
+```
+
+Growth
+=====================================  
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+
+# Time series with number fo confirmed case per country
+time_series_19_covid_country <- time_series_19_covid %>% 
+  filter(`Case type` == "Confirmed") %>% 
+  select(c('Date', 'Country/Region', 'Cases')) %>% 
+  group_by(`Date`, `Country/Region`) %>% 
+  summarize(sum(Cases))
+
+dateRangeInput("daterange", "Date range:",
+                start = max(time_series_19_covid_country$Date)-20,
+                end   = max(time_series_19_covid_country$Date))
+
+selectInput("country", "Select country:",
+      unique(time_series_19_covid_country$`Country/Region`),
+      selected=c('Italy', 'France', 'Switzerland'),
+      multiple=TRUE
+    )
+
+```
+
+Column
+-----------------------------------------------------------------------
+
+###
+
+```{r}
+
+g_growth <- reactive({
+  time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% 
+    ggplot(aes(x=Date, y=`sum(Cases)`, color=`Country/Region`)) + geom_point(shape = 21, size=3, stroke=1) + ylab("Cases") + scale_y_log10() + theme(legend.title = element_blank())
+  
+})
+
+renderPlotly({g_growth()})
+
+```

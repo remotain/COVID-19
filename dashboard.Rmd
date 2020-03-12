@@ -11,7 +11,7 @@ runtime: shiny
 ---
 
 ```{bash, include=FALSE}
-cd COVID-19 && git pull
+cd DATA && git pull
 ```
 
 ```{r global, include=FALSE}
@@ -25,7 +25,7 @@ library(maps)
 setwd("~/Work/COVID-19/")
 #
 # Load Data Set for confirmed Cases
-time_series_19_covid_Confirmed <- read_csv("COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv")
+time_series_19_covid_Confirmed <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv")
 # Tidy data
 time_series_19_covid_Confirmed <- time_series_19_covid_Confirmed %>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
 # Add Features
@@ -33,7 +33,7 @@ time_series_19_covid_Confirmed <- time_series_19_covid_Confirmed %>% mutate(`Cas
 #
 #
 # Load Data Set for Recovered Cases
-time_series_19_covid_Recovered <- read_csv("COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv")
+time_series_19_covid_Recovered <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv")
 # Tidy data
 time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
 # Add Features
@@ -41,7 +41,7 @@ time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% mutate(`Cas
 #
 #
 # Load Data Set for Deaths Cases
-time_series_19_covid_Deaths <- read_csv("COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv")
+time_series_19_covid_Deaths <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv")
 # Tidy data
 time_series_19_covid_Deaths<- time_series_19_covid_Deaths%>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
 # Add Features

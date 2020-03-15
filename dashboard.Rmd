@@ -117,7 +117,7 @@ leafletOutput("map")
 
 ```
 
-Countries
+Total Cases
 =====================================  
 
 Row
@@ -141,12 +141,15 @@ output$tab<-DT::renderDT(tab,server=TRUE, selection = 'single', options = list(p
 g <- reactive({
 
     if ( is_null(input$tab_rows_selected) ){
-      time_series_19_covid %>% group_by(Date, `Case type`) %>% summarise(sum(Cases)) %>% ggplot(aes(x=Date, y=`sum(Cases)`, color=`Case type`)) + geom_line() + geom_point(size=2) + ylab("Cases") + scale_color_manual(values=c("#f39c12", "red", "#52be80")) + theme(legend.title = element_blank(), legend.position = "none")
+      tmp <- time_series_19_covid %>% group_by(Date, `Case type`) %>% summarise(sum(Cases)) 
     } else {
       filter_country <- tab[input$tab_rows_selected, ]$`Country/Region`
       
-      time_series_19_covid %>% filter(`Country/Region` == filter_country) %>% group_by(Date, `Case type`) %>% summarise(sum(Cases)) %>% ggplot(aes(x=Date, y=`sum(Cases)`, color=`Case type`)) + geom_line() + geom_point(size=2) + ylab("Cases") + scale_color_manual(values=c("#f39c12", "red", "#52be80"))+theme(legend.title = element_blank(), legend.position = "none")
+      tmp <- time_series_19_covid %>% filter(`Country/Region` == filter_country) %>% group_by(Date, `Case type`) %>% summarise(sum(Cases))
     }
+  
+    tmp %>% ggplot(aes(x=Date, y=`sum(Cases)`, color=`Case type`)) + geom_line() + geom_point(size=2) + ylab("") + scale_color_manual(values=c("#f39c12", "red", "#52be80")) + theme(legend.title = element_blank(), legend.position = "none") + facet_grid(rows = vars(`Case type`), scales='free_y')
+    
 })
 
 renderPlotly({g()})
@@ -154,6 +157,39 @@ renderPlotly({g()})
 #renderPrint({c(input$tab_rows_selected)})
 
 ```
+
+```{r}
+
+#### Time series with number fo confirmed case per country
+###time_series_19_covid_country_daily <- time_series_19_covid %>% 
+###  filter(`Case type` == "Confirmed") %>% 
+###  select(c('Date', 'Country/Region', 'Cases')) %>% mutate(daily_cases = ###`Cases` - lag(`Cases`, default = 0))
+###
+###dateRangeInput("daterange_daily", "Date range:",
+###                start = max(time_series_19_covid_country_daily$Date)-20,
+###                end   = max(time_series_19_covid_country_daily$Date))
+###
+###selectInput("country_daily", "Select country:",
+###      unique(time_series_19_covid_country_daily$`Country/Region`),
+###      selected='Italy',
+###      multiple=FALSE
+###    )
+
+```
+
+```{r}
+
+##g_daily <- reactive({
+##
+##  time_series_19_covid_country_daily %>% filter(`Country/Region` %in% ##input$country_daily) %>% filter(Date >= input$daterange_daily[1] & Date <= ##input$daterange_daily[2] ) %>% 
+##    ggplot(aes(x=Date, y=`daily_cases`, color=`Country/Region`)) + geom_col() ##+ ylab("Daily Cases") +  theme(legend.title = element_blank())
+##  
+##})
+##
+##renderPlotly({g_daily()})
+
+```
+
 
 Growth
 =====================================  
@@ -190,11 +226,14 @@ Column
 ```{r}
 
 g_growth <- reactive({
+
   time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% 
-    ggplot(aes(x=Date, y=`sum(Cases)`, color=`Country/Region`)) + geom_point(shape = 21, size=3, stroke=1) + ylab("Cases") + scale_y_log10() + theme(legend.title = element_blank())
+    ggplot(aes(x=Date, y=`sum(Cases)`, color=`Country/Region`)) + geom_point(shape = 21, size=3, stroke=1) + ylab("Log(Cases)") +  theme(legend.title = element_blank()) + geom_smooth(method="nls", formula=y ~ exp(a+b*(x-min(x))), method.args = list(start=list(a=1,b=1)), se=FALSE, fullrange=TRUE) + xlim(input$daterange[1],input$daterange[2]+2) 
   
 })
 
 renderPlotly({g_growth()})
 
 ```
+
+

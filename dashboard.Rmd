@@ -201,14 +201,19 @@ Column {.sidebar}
 
 # Time series with number fo confirmed case per country
 time_series_19_covid_country <- time_series_19_covid %>% 
-  filter(`Case type` == "Confirmed") %>% 
-  select(c('Date', 'Country/Region', 'Cases')) %>% 
-  group_by(`Date`, `Country/Region`) %>% 
-  summarize(sum(Cases))
+  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% 
+  group_by(`Date`, `Country/Region`, `Case type`) %>% 
+  summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`)
 
 dateRangeInput("daterange", "Date range:",
                 start = max(time_series_19_covid_country$Date)-20,
                 end   = max(time_series_19_covid_country$Date))
+
+selectInput("casetype", "Select case type:",
+      c('Confirmed', 'Recovered', 'Deaths'),
+      selected='Confirmed',
+      multiple=FALSE
+    )
 
 selectInput("country", "Select country:",
       unique(time_series_19_covid_country$`Country/Region`),
@@ -227,8 +232,8 @@ Column
 
 g_growth <- reactive({
 
-  time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% 
-    ggplot(aes(x=Date, y=`sum(Cases)`, color=`Country/Region`)) + geom_point(shape = 21, size=3, stroke=1) + ylab("Log(Cases)") +  theme(legend.title = element_blank()) + geom_smooth(method="nls", formula=y ~ exp(a+b*(x-min(x))), method.args = list(start=list(a=1,b=1)), se=FALSE, fullrange=TRUE) + xlim(input$daterange[1],input$daterange[2]+2) 
+  time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% filter(`Case type` == input$casetype) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% 
+    ggplot(aes(x=Date, y=`Total Cases`, color=`Country/Region`)) + geom_point(shape = 21, size=3, stroke=1) + ylab(paste('Total Cases: ', input$casetype)) +  theme(legend.title = element_blank()) + geom_smooth(method="nls", formula=y ~ exp(a+b*(x-min(x))), method.args = list(start=list(a=1,b=1)), se=FALSE, fullrange=TRUE) + xlim(input$daterange[1],input$daterange[2]+2) 
   
 })
 

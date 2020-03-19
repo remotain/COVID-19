@@ -232,8 +232,7 @@ Column
 
 g_growth <- reactive({
 
-  time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% filter(`Case type` == input$casetype) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% 
-    ggplot(aes(x=Date, y=`Total Cases`, color=`Country/Region`)) + geom_point(shape = 21, size=3, stroke=1) + ylab(paste('Total Cases: ', input$casetype)) +  theme(legend.title = element_blank()) + geom_smooth(method="nls", formula=y ~ exp(a+b*(x-min(x))), method.args = list(start=list(a=1,b=1)), se=FALSE, fullrange=TRUE) + xlim(input$daterange[1],input$daterange[2]+2) 
+  time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% filter(`Case type` == input$casetype) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% ggplot(aes(x=Date, y=`Total Cases`, color=`Country/Region`)) + geom_point(shape = 21, size=3, stroke=1) + ylab(paste('Total Cases: ', input$casetype)) +  theme(legend.title = element_blank()) + geom_smooth(method="nls", formula=y ~ exp(a+b*(x-min(x))), method.args = list(start=list(a=1,b=1)), se=FALSE, fullrange=TRUE) + xlim(input$daterange[1],input$daterange[2]+2) 
   
 })
 

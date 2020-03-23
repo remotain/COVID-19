@@ -77,7 +77,7 @@ summary_totals<-time_series_19_covid %>% filter(Date == max(Date)) %>% group_by(
 
 ```
 
-Overview
+Map
 =====================================  
 
 Row
@@ -117,7 +117,7 @@ leafletOutput("map")
 
 ```
 
-Total Cases
+Overview
 =====================================  
 
 Row
@@ -158,7 +158,7 @@ renderPlotly({g()})
 
 ```
 
-Daily Cases
+Evolution
 =====================================  
 
 Column {.sidebar}
@@ -168,17 +168,32 @@ Column {.sidebar}
 
 # Time series with number fo confirmed case per country
 time_series_19_covid_country_daily <- time_series_19_covid %>% 
-  # filter(`Case type` == "Confirmed") %>% 
-  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% mutate(daily_cases = `Cases` - lag(`Cases`, default = 0)) %>% group_by(`Date`, `Country/Region`, `Case type`) %>% summarize(sum(daily_cases)) %>% rename(`daily_cases`=`sum(daily_cases)`)
+  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% mutate(daily_cases = `Cases` - lag(`Cases`, default = 0)) %>% group_by(`Date`, `Country/Region`, `Case type`) %>% summarize(sum(daily_cases)) %>% rename(`Daily Cases`=`sum(daily_cases)`)
+# Time series with number fo confirmed case per country
+time_series_19_covid_country <- time_series_19_covid %>% 
+  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% 
+  group_by(`Date`, `Country/Region`, `Case type`) %>% 
+  summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`)
 
-dateRangeInput("daterange_daily", "Date range:",
-                start = max(time_series_19_covid_country_daily$Date)-20,
-                end   = max(time_series_19_covid_country_daily$Date))
 
-selectInput("country_daily", "Select country:",
-      unique(data_summary_per_country %>% arrange(desc(Confirmed)) %>% select(`Country/Region`)),
-      selected='Italy',
+dateRangeInput("daterange", "Date range:",
+                start = max(time_series_19_covid$Date)-20,
+                end   = max(time_series_19_covid$Date))
+
+radioButtons("casecount", "Case counts",
+               c("Total" = "Total",
+                 "Daily" = "Daily"))
+
+selectInput("casetype", "Case type:",
+      c('Confirmed', 'Recovered', 'Deaths'),
+      selected='Confirmed',
       multiple=FALSE
+    )
+
+selectInput("country", "Countries:",
+       unique(data_summary_per_country %>% arrange(desc(Confirmed)) %>% select(`Country/Region`)),
+      selected=c('Italy', 'France', 'Switzerland'),
+      multiple=TRUE
     )
 
 ```
@@ -192,63 +207,64 @@ Row
 
 g_daily <- reactive({
 
-  time_series_19_covid_country_daily %>% filter(`Country/Region` %in% input$country_daily) %>% filter(Date >= input$daterange_daily[1] & Date <= input$daterange_daily[2] ) %>% 
-    ggplot(aes(x=Date, y=`daily_cases`, fill=`Case type`)) + geom_col() + ylab("Daily Cases") + scale_color_manual(values=c("#f39c12", "red", "#52be80")) +  theme(legend.title = element_blank(), , legend.position = "none") + facet_grid(rows = vars(`Case type`), scales='free_y')
-  
+  if ( input$casecount == 'Daily' ){
+    time_series_19_covid_country_daily %>% filter(`Country/Region` %in% input$country) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% filter(`Case type` == input$casetype) %>% 
+    ggplot(aes(x=Date, y=`Daily Cases`,color=`Country/Region`)) + geom_line(size=1) + geom_point(size=2, stroke=1) + ylab(paste('Daily Cases: ', input$casetype)) +  theme(legend.title = element_blank())
+  } else if (input$casecount == 'Total') {
+    time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% filter(`Case type` == input$casetype) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% ggplot(aes(x=Date, y=`Total Cases`, color=`Country/Region`)) + geom_line(size=1) + geom_point(size=2, stroke=1) + ylab(paste('Total Cases: ', input$casetype)) +  theme(legend.title = element_blank())
+  }
 })
 
 renderPlotly({g_daily()})
 
 ```
 
-
-Growth
-=====================================  
-
-Column {.sidebar}
------------------------------------------------------------------------
-
 ```{r}
+#Growth
+#=====================================  
+#
+#Column {.sidebar}
+#-----------------------------------------------------------------------
 
-# Time series with number fo confirmed case per country
-time_series_19_covid_country <- time_series_19_covid %>% 
-  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% 
-  group_by(`Date`, `Country/Region`, `Case type`) %>% 
-  summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`)
-
-dateRangeInput("daterange", "Date range:",
-                start = max(time_series_19_covid_country$Date)-20,
-                end   = max(time_series_19_covid_country$Date))
-
-selectInput("casetype", "Select case type:",
-      c('Confirmed', 'Recovered', 'Deaths'),
-      selected='Confirmed',
-      multiple=FALSE
-    )
-
-selectInput("country", "Select country:",
-       unique(data_summary_per_country %>% arrange(desc(Confirmed)) %>% select(`Country/Region`)),
-      selected=c('Italy', 'France', 'Switzerland'),
-      multiple=TRUE
-    )
-
+## Time series with number fo confirmed case per country
+#time_series_19_covid_country <- time_series_19_covid %>% 
+#  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% 
+#  group_by(`Date`, `Country/Region`, `Case type`) %>% 
+#  summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`)
+#
+#dateRangeInput("daterange", "Date range:",
+#                start = max(time_series_19_covid_country$Date)-20,
+#                end   = max(time_series_19_covid_country$Date))
+#
+#selectInput("casetype", "Select case type:",
+#      c('Confirmed', 'Recovered', 'Deaths'),
+#      selected='Confirmed',
+#      multiple=FALSE
+#    )
+#
+#selectInput("country", "Select country:",
+#       unique(data_summary_per_country %>% arrange(desc(Confirmed)) %>% #select(`Country/Region`)),
+#      selected=c('Italy', 'France', 'Switzerland'),
+#      multiple=TRUE
+#    )
+#
 ```
 
-Column
------------------------------------------------------------------------
-
-###
 
 ```{r}
-
-g_growth <- reactive({
-
-  time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% filter(`Case type` == input$casetype) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% ggplot(aes(x=Date, y=`Total Cases`, color=`Country/Region`)) + geom_point(shape = 21, size=3, stroke=1) + ylab(paste('Total Cases: ', input$casetype)) +  theme(legend.title = element_blank()) + geom_smooth(method="nls", formula=y ~ exp(a+b*(x-min(x))), method.args = list(start=list(a=1,b=1)), se=FALSE, fullrange=TRUE) + xlim(input$daterange[1],input$daterange[2]+2) 
-  
-})
-
-renderPlotly({g_growth()})
-
+#Column
+#-----------------------------------------------------------------------
+#
+####
+#
+#g_growth <- reactive({
+#
+#  time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% #filter(`Case type` == input$casetype) %>% filter(Date >= input$daterange[1] & Date <= #input$daterange[2] ) %>% ggplot(aes(x=Date, y=`Total Cases`, color=`Country/Region`)) + #geom_point(shape = 21, size=3, stroke=1) + ylab(paste('Total Cases: ', input$casetype)) #+  theme(legend.title = element_blank()) + geom_smooth(method="nls", formula=y ~ #exp(a+b*(x-min(x))), method.args = list(start=list(a=1,b=1)), se=FALSE, fullrange=TRUE) #+ xlim(input$daterange[1],input$daterange[2]+2) 
+#  
+#})
+#
+#renderPlotly({g_growth()})
+#
 ```
 
 

@@ -25,7 +25,7 @@ library(maps)
 setwd("~/Work/COVID-19/")
 #
 # Load Data Set for confirmed Cases
-time_series_19_covid_Confirmed <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv")
+time_series_19_covid_Confirmed <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
 # Tidy data
 time_series_19_covid_Confirmed <- time_series_19_covid_Confirmed %>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
 # Add Features
@@ -33,23 +33,25 @@ time_series_19_covid_Confirmed <- time_series_19_covid_Confirmed %>% mutate(`Cas
 #
 #
 # Load Data Set for Recovered Cases
-time_series_19_covid_Recovered <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv")
+# NO LONGER UPDATED IN THE REPOSITORIES 23/03/2020
+#
+#time_series_19_covid_Recovered <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv")
 # Tidy data
-time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
+#time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
 # Add Features
-time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% mutate(`Case type` = "Recovered")
+#time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% mutate(`Case type` = "Recovered")
 #
 #
 # Load Data Set for Deaths Cases
-time_series_19_covid_Deaths <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv")
+time_series_19_covid_Deaths <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
 # Tidy data
 time_series_19_covid_Deaths<- time_series_19_covid_Deaths%>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
 # Add Features
 time_series_19_covid_Deaths <- time_series_19_covid_Deaths %>% mutate(`Case type` = "Deaths")
 #
 #
-# Merge Confirmed, Recovered, Deaths
-time_series_19_covid <- bind_rows(time_series_19_covid_Confirmed ,time_series_19_covid_Recovered, time_series_19_covid_Deaths ) %>% mutate(Date = as.Date(Date, format = '%m/%d/%y'))
+# Merge Confirmed, Deaths
+time_series_19_covid <- bind_rows(time_series_19_covid_Confirmed ,time_series_19_covid_Deaths ) %>% mutate(Date = as.Date(Date, format = '%m/%d/%y'))
 #
 #
 # Change US to USA
@@ -69,11 +71,23 @@ data_summary_per_country <- time_series_19_covid %>%
   group_by(`Country/Region`, `Case type`) %>% 
   summarize(sum(Cases)) %>% 
   pivot_wider(names_from = `Case type`, values_from = `sum(Cases)`) %>%
-  left_join(., country_coords, by = c("Country/Region"="country"))
+  left_join(., country_coords, by = c("Country/Region"="country")) %>% arrange(desc(`Confirmed`))
 #
 #
 # Summary totals
 summary_totals<-time_series_19_covid %>% filter(Date == max(Date)) %>% group_by(`Case type`) %>% summarize(sum(Cases))
+#
+#
+# Time series with the daily number of cases per country
+time_series_19_covid_country_daily <- time_series_19_covid %>% 
+  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% mutate(daily_cases = `Cases` - lag(`Cases`, default = 0)) %>% group_by(`Date`, `Country/Region`, `Case type`) %>% summarize(sum(daily_cases)) %>% rename(`Daily Cases`=`sum(daily_cases)`)
+#
+#
+# Time series with the total number of cases per country
+time_series_19_covid_country <- time_series_19_covid %>% 
+  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% 
+  group_by(`Date`, `Country/Region`, `Case type`) %>% 
+  summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`)
 
 ```
 
@@ -88,9 +102,10 @@ Row
 valueBox(summary_totals %>% filter(`Case type` == "Confirmed") %>% select(`sum(Cases)`), icon = "fa-stethoscope", color="#f39c12")
 ```
 
-### Recovered
+
 ```{r}
-valueBox(summary_totals %>% filter(`Case type` == "Recovered") %>% select(`sum(Cases)`), icon = "fa-smile", color=" #27ae60 ")
+### Recovered
+#valueBox(summary_totals %>% filter(`Case type` == "Recovered") %>% select(`sum(Cases)`), icon = "fa-smile", color=" #27ae60 ")
 ```
 
 ### Deaths
@@ -127,7 +142,9 @@ Row
 
 ```{r}
 # Table with count per countries
-tab <- time_series_19_covid %>% filter(Date == max(Date)) %>% group_by(`Country/Region`, `Case type`) %>% summarize(sum(Cases)) %>% pivot_wider(names_from = `Case type`, values_from = `sum(Cases)`) %>% arrange(desc(`Confirmed`))
+#tab <- time_series_19_covid %>% filter(Date == max(Date)) %>% group_by(`Country/Region`, `Case type`) %>% summarize(sum(Cases)) %>% pivot_wider(names_from = `Case type`, values_from = `sum(Cases)`) %>% arrange(desc(`Confirmed`))
+
+tab <- data_summary_per_country %>% select(c('Country/Region', 'Confirmed', 'Deaths'))
 
 DT::DTOutput("tab")
 
@@ -141,14 +158,13 @@ output$tab<-DT::renderDT(tab,server=TRUE, selection = 'single', options = list(p
 g <- reactive({
 
     if ( is_null(input$tab_rows_selected) ){
-      tmp <- time_series_19_covid %>% group_by(Date, `Case type`) %>% summarise(sum(Cases)) 
+      tmp <- time_series_19_covid_country %>% group_by(`Date`, `Case type`) %>% summarise(`Total Cases` = sum(`Total Cases`))
     } else {
       filter_country <- tab[input$tab_rows_selected, ]$`Country/Region`
-      
-      tmp <- time_series_19_covid %>% filter(`Country/Region` == filter_country) %>% group_by(Date, `Case type`) %>% summarise(sum(Cases))
+      tmp <- time_series_19_covid_country %>% filter(`Country/Region` == filter_country)
     }
   
-    tmp %>% ggplot(aes(x=Date, y=`sum(Cases)`, color=`Case type`)) + geom_line() + geom_point(size=2) + ylab("") + scale_color_manual(values=c("#f39c12", "red", "#52be80")) + theme(legend.title = element_blank(), legend.position = "none") + facet_grid(rows = vars(`Case type`), scales='free_y')
+    tmp %>% ggplot(aes(x=Date, y=`Total Cases`, color=`Case type`)) + geom_line() + geom_point(size=2) + ylab("") + scale_color_manual(values=c("#f39c12", "red", "#52be80")) + theme(legend.title = element_blank(), legend.position = "none") + facet_grid(rows = vars(`Case type`), scales='free_y')
     
 })
 
@@ -166,16 +182,6 @@ Column {.sidebar}
 
 ```{r}
 
-# Time series with number fo confirmed case per country
-time_series_19_covid_country_daily <- time_series_19_covid %>% 
-  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% mutate(daily_cases = `Cases` - lag(`Cases`, default = 0)) %>% group_by(`Date`, `Country/Region`, `Case type`) %>% summarize(sum(daily_cases)) %>% rename(`Daily Cases`=`sum(daily_cases)`)
-# Time series with number fo confirmed case per country
-time_series_19_covid_country <- time_series_19_covid %>% 
-  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% 
-  group_by(`Date`, `Country/Region`, `Case type`) %>% 
-  summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`)
-
-
 dateRangeInput("daterange", "Date range:",
                 start = max(time_series_19_covid$Date)-20,
                 end   = max(time_series_19_covid$Date))
@@ -185,7 +191,7 @@ radioButtons("casecount", "Case counts",
                  "Daily" = "Daily"))
 
 selectInput("casetype", "Case type:",
-      c('Confirmed', 'Recovered', 'Deaths'),
+      unique(time_series_19_covid$`Case type`),
       selected='Confirmed',
       multiple=FALSE
     )

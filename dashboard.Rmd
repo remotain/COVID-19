@@ -63,31 +63,101 @@ library(maps)
 country_coords <- world.cities %>% 
   filter(capital == 1) %>%
   select(country = country.etc, lat, lng = long)
+country_coords$country[country_coords$country == 'UK'] <- "United Kingdom"
+country_coords$country[country_coords$country == 'Korea South'] <- "Korea, South"
+country_coords$country[country_coords$country == 'Czech Republic'] <- 'Czechia'
+country_coords$country[country_coords$country == 'Serbia and Montenegro'] <- 'Serbia'
+country_coords$country[country_coords$country == 'Macedonia'] <- 'North Macedonia'
+country_coords$country[country_coords$country == 'Ivory Coast	'] <- 'Cote d\'Ivoire	'
 #
 #
-# Data summary per country
-data_summary_per_country <- time_series_19_covid %>% 
-  filter(Date == max(Date)) %>% 
-  group_by(`Country/Region`, `Case type`) %>% 
-  summarize(sum(Cases)) %>% 
-  pivot_wider(names_from = `Case type`, values_from = `sum(Cases)`) %>%
-  left_join(., country_coords, by = c("Country/Region"="country")) %>% arrange(desc(`Confirmed`))
+# Word population dataset
+pop <- read_csv("DATA_EXTERNAL/API_SP.POP.TOTL_DS2_en_csv_v2_887275/API_SP.POP.TOTL_DS2_en_csv_v2_887275.csv", skip = 3)
+# Manually hack some names
+pop$`Country Name`[pop$`Country Code` == 'USA'] <- "USA"
+pop$`Country Name`[pop$`Country Name` == 'Bahamas, The'] <- "Bahamas"
+pop$`Country Name`[pop$`Country Name` == 'Brunei Darussalam'] <- "Brunei"
+pop$`Country Name`[pop$`Country Name` == 'Congo, Dem. Rep.'] <- "Congo (Brazzaville)"
+pop$`Country Name`[pop$`Country Name` == 'Congo, Rep.'] <- "Congo (Kinshasa)"
+pop$`Country Name`[pop$`Country Name` == 'Czech Republic'] <- "Czechia"
+pop$`Country Name`[pop$`Country Name` == 'Egypt, Arab Rep.'] <- "Egypt"
+pop$`Country Name`[pop$`Country Name` == 'Gambia, The'] <- "Gambia"
+pop$`Country Name`[pop$`Country Name` == 'Iran, Islamic Rep.'] <- "Iran"
+pop$`Country Name`[pop$`Country Name` == 'Korea, Rep.'] <- "Korea, South"
+pop$`Country Name`[pop$`Country Name` == 'Kyrgyz Republic'] <- "Kyrgyzstan"
+pop$`Country Name`[pop$`Country Name` == 'Russian Federation'] <- "Russia"
+pop$`Country Name`[pop$`Country Name` == 'St. Lucia'] <- "Saint Lucia"
+pop$`Country Name`[pop$`Country Name` == 'St. Vincent and the Grenadines'] <- "Saint Vincent and the Grenadines"
+pop$`Country Name`[pop$`Country Name` == 'Slovak Republic'] <- "Slovakia"
+pop$`Country Name`[pop$`Country Name` == 'Syrian Arab Republic'] <- "Syria"
+pop$`Country Name`[pop$`Country Name` == 'Venezuela, RB'] <- "Venezuela"
+pop$`Country Name`[pop$`Country Name` == 'Venezuela, RB'] <- "Venezuela"
 #
-#
-# Summary totals
-summary_totals<-time_series_19_covid %>% filter(Date == max(Date)) %>% group_by(`Case type`) %>% summarize(sum(Cases))
+pop <- pop %>% select(c(-`Indicator Name`, -`Indicator Code`)) %>% 
+  pivot_longer(cols=c(-`Country Name`, -`Country Code`), 
+               names_to='Year', values_to='Population') %>% 
+  drop_na(Population) %>% 
+  group_by(`Country Name`, `Country Code`) %>% 
+  filter(Year == max(Year)) %>% select(cols=c(-`Country Code`, -`Year`))
+# Join covid data with word population data
+time_series_19_covid <- time_series_19_covid %>% left_join(., pop, by=c("Country/Region"="Country Name"))
 #
 #
 # Time series with the daily number of cases per country
 time_series_19_covid_country_daily <- time_series_19_covid %>% 
-  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% mutate(daily_cases = `Cases` - lag(`Cases`, default = 0)) %>% group_by(`Date`, `Country/Region`, `Case type`) %>% summarize(sum(daily_cases)) %>% rename(`Daily Cases`=`sum(daily_cases)`)
+  select(c('Date', 'Country/Region', 'Population' ,'Case type', 'Cases')) %>% 
+  mutate(daily_cases = `Cases` - lag(`Cases`)) %>% filter(daily_cases >= 0) %>% 
+  group_by(`Date`, `Country/Region`, `Population`, `Case type`) %>% 
+  summarize(sum(daily_cases)) %>% rename(`Total Cases`=`sum(daily_cases)`) %>%
+  left_join(., country_coords, by = c("Country/Region"="country"))
 #
 #
 # Time series with the total number of cases per country
 time_series_19_covid_country <- time_series_19_covid %>% 
-  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% 
-  group_by(`Date`, `Country/Region`, `Case type`) %>% 
-  summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`)
+  select(c('Date', 'Country/Region', 'Population' ,'Case type', 'Cases')) %>% 
+  group_by(`Date`, `Country/Region`, `Population`, `Case type`) %>% 
+  summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`) %>%
+  left_join(., country_coords, by = c("Country/Region"="country"))
+
+```
+
+Sidebar {.sidebar}
+=====================================
+
+```{r}
+sliderInput("daterange", "Date:",
+            min(time_series_19_covid$Date), 
+            max(time_series_19_covid$Date),
+            value = max(time_series_19_covid$Date),
+            step=1,
+            animate=TRUE)
+
+#dateRangeInput("daterange", "Date range:",
+#                start = max(time_series_19_covid$Date)-20,
+#                end   = max(time_series_19_covid$Date))
+
+radioButtons("casecount", "Case counts:",
+               c("Total" = "Total",
+                 "Daily" = "Daily"))
+
+radioButtons("scale", "Axis Scale:", 
+                   c("Linear" = "lin",
+                     "Logarithmic" = "log"))
+
+checkboxInput("norm", "Per 100'000 inhabitants", FALSE)
+
+selectInput("casetype", "Select Case type:",
+      unique(time_series_19_covid$`Case type`),
+      selected='Confirmed',
+      multiple=FALSE
+    )
+
+selectInput("country", "Select Countries:",
+       unique(data_summary_per_country %>% arrange(desc(Confirmed)) %>% 
+                select(`Country/Region`)),
+      selected=c('Italy', 'France', 'Switzerland'),
+      multiple=TRUE
+    )
 
 ```
 
@@ -97,20 +167,27 @@ Map
 Row
 -------------------------------------
 
+```{r}
+# Summary totals
+summary_totals <- reactive({
+  time_series_19_covid %>% filter(Date == input$daterange) %>% group_by(`Case type`) %>% summarize(sum(Cases))
+})
+```
+  
 ### Confirmed
 ```{r}
-valueBox(summary_totals %>% filter(`Case type` == "Confirmed") %>% select(`sum(Cases)`), icon = "fa-stethoscope", color="#f39c12")
-```
-
-
-```{r}
-### Recovered
-#valueBox(summary_totals %>% filter(`Case type` == "Recovered") %>% select(`sum(Cases)`), icon = "fa-smile", color=" #27ae60 ")
+renderValueBox({
+  valueBox(summary_totals() %>% filter(`Case type` == "Confirmed") %>% select(`sum(Cases)`), 
+           icon = "fa-stethoscope", color="#f39c12")
+})
 ```
 
 ### Deaths
 ```{r}
-valueBox(summary_totals %>% filter(`Case type` == "Deaths") %>% select(`sum(Cases)`), icon = "fa-sad-tear", color='red')
+renderValueBox({
+  valueBox(summary_totals() %>% filter(`Case type` == "Deaths") %>% select(`sum(Cases)`), 
+           icon = "fa-sad-tear", color='red')
+})  
 ```
 
 Row
@@ -118,91 +195,51 @@ Row
 
 ###
 ```{r}
-mytext <- paste("Country: ", data_summary_per_country$`Country/Region`, "<br/>", "Confirmed: ", data_summary_per_country$`Confirmed`, "<br/>", "Recovered: ", data_summary_per_country$`Recovered`, "<br/>", "Deaths: ", data_summary_per_country$`Deaths`, sep="") %>%
-  lapply(htmltools::HTML)
 
-## leaflet map
-output$map<-renderLeaflet({ 
-  data_summary_per_country %>% leaflet() %>% addTiles() %>% 
-  addProviderTiles("OpenStreetMap.Mapnik") %>%
-  addCircleMarkers(lat=~`lat`, lng =~`lng`, radius=~5*log10(`Confirmed`), layerId = ~unique(`Country/Region`), stroke=FALSE, label = mytext)
-  })
-
-leafletOutput("map")
-
-```
-
-Overview
-=====================================  
-
-Row
--------------------------------------
-
-###
-
-```{r}
-# Table with count per countries
-#tab <- time_series_19_covid %>% filter(Date == max(Date)) %>% group_by(`Country/Region`, `Case type`) %>% summarize(sum(Cases)) %>% pivot_wider(names_from = `Case type`, values_from = `sum(Cases)`) %>% arrange(desc(`Confirmed`))
-
-tab <- data_summary_per_country %>% select(c('Country/Region', 'Confirmed', 'Deaths'))
-
-DT::DTOutput("tab")
-
-output$tab<-DT::renderDT(tab,server=TRUE, selection = 'single', options = list(pageLength = 15, lengthMenu = c(15)))
-```
-
-###
-
-```{r}
-# Reactive based on the row selected in the previous table
-g <- reactive({
-
-    if ( is_null(input$tab_rows_selected) ){
-      tmp <- time_series_19_covid_country %>% group_by(`Date`, `Case type`) %>% summarise(`Total Cases` = sum(`Total Cases`))
-    } else {
-      filter_country <- tab[input$tab_rows_selected, ]$`Country/Region`
-      tmp <- time_series_19_covid_country %>% filter(`Country/Region` == filter_country)
+m <- reactive({
+  # Grab relevant dataframe
+  if(input$casecount == 'Total'){
+    data_summary_per_country <- time_series_19_covid_country
+  } else if(input$casecount == 'Daily'){
+    data_summary_per_country <- time_series_19_covid_country_daily
+  }
+  # Filter and transform
+  data_summary_per_country <- data_summary_per_country %>%
+    filter(Date == input$daterange) %>% 
+    pivot_wider(names_from = `Case type`, values_from = `Total Cases`) 
+  # Normalize if required
+  if(input$norm){
+      data_summary_per_country <- data_summary_per_country %>% mutate(`Confirmed` = 100000 * `Confirmed` / `Population`)
+      data_summary_per_country <- data_summary_per_country %>% mutate(`Deaths` = 100000 * `Deaths` / `Population`)
     }
-  
-    tmp %>% ggplot(aes(x=Date, y=`Total Cases`, color=`Case type`)) + geom_line() + geom_point(size=2) + ylab("") + scale_color_manual(values=c("#f39c12", "red", "#52be80")) + theme(legend.title = element_blank(), legend.position = "none") + facet_grid(rows = vars(`Case type`), scales='free_y')
+  # Popup text
+  mytext <- paste("Country: ", data_summary_per_country$`Country/Region`, "<br/>", "Population: ", format(data_summary_per_country$`Population`, format="d", big.mark="'"), "<br/>", "Confirmed: ", sprintf("%.2f", data_summary_per_country$`Confirmed`), "<br/>", "Deaths: ", sprintf("%.2f", data_summary_per_country$`Deaths`), sep="") %>%
+  lapply(htmltools::HTML)
     
-})
+  if(input$casetype == 'Confirmed'){
+    c <- "#f39c12"
+  } else {
+    c <- "red"
+  }
+  
+  data_summary_per_country %>% 
+    rename(counts = input$casetype) %>% 
+    leaflet() %>% addTiles() %>%
+  addProviderTiles("OpenStreetMap.Mapnik") %>%
+  addCircleMarkers(lat=~`lat`, lng =~`lng`, 
+                   radius=~5*log10(counts), 
+                   layerId = ~unique(`Country/Region`), 
+                   color = c, fillOpacity = 0.5,
+                   stroke=FALSE, label = mytext)
 
-renderPlotly({g()})
-
-#renderPrint({c(input$tab_rows_selected)})
-
+  })
+  
+## leaflet map
+renderLeaflet({m()})
 ```
 
 Evolution
 =====================================  
-
-Column {.sidebar}
------------------------------------------------------------------------
-
-```{r}
-
-dateRangeInput("daterange", "Date range:",
-                start = max(time_series_19_covid$Date)-20,
-                end   = max(time_series_19_covid$Date))
-
-radioButtons("casecount", "Case counts",
-               c("Total" = "Total",
-                 "Daily" = "Daily"))
-
-selectInput("casetype", "Case type:",
-      unique(time_series_19_covid$`Case type`),
-      selected='Confirmed',
-      multiple=FALSE
-    )
-
-selectInput("country", "Countries:",
-       unique(data_summary_per_country %>% arrange(desc(Confirmed)) %>% select(`Country/Region`)),
-      selected=c('Italy', 'France', 'Switzerland'),
-      multiple=TRUE
-    )
-
-```
 
 Row
 -----------------------------------------------------------------------
@@ -212,65 +249,89 @@ Row
 ```{r}
 
 g_daily <- reactive({
-
+  
+  # Grab the relevant dataset
   if ( input$casecount == 'Daily' ){
-    time_series_19_covid_country_daily %>% filter(`Country/Region` %in% input$country) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% filter(`Case type` == input$casetype) %>% 
-    ggplot(aes(x=Date, y=`Daily Cases`,color=`Country/Region`)) + geom_line(size=1) + geom_point(size=2, stroke=1) + ylab(paste('Daily Cases: ', input$casetype)) +  theme(legend.title = element_blank())
-  } else if (input$casecount == 'Total') {
-    time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% filter(`Case type` == input$casetype) %>% filter(Date >= input$daterange[1] & Date <= input$daterange[2] ) %>% ggplot(aes(x=Date, y=`Total Cases`, color=`Country/Region`)) + geom_line(size=1) + geom_point(size=2, stroke=1) + ylab(paste('Total Cases: ', input$casetype)) +  theme(legend.title = element_blank())
+    gg <- time_series_19_covid_country_daily 
+  } else if(input$casecount == 'Total') {
+    gg <- time_series_19_covid_country
   }
+  # Filter
+  gg <- gg %>% filter(`Country/Region` %in% input$country) %>% filter(Date >= min(time_series_19_covid$Date) & Date <= input$daterange ) %>% filter(`Case type` == input$casetype)
+  # Normalize total counts if required
+  if(input$norm){
+    gg <- gg %>% mutate(`Total Cases` = 100000 * `Total Cases` / `Population`)
+  }
+  # Define the plot
+  gg <- gg %>% ggplot(aes(x=Date, y=`Total Cases`,color=`Country/Region`)) + 
+    geom_line(size=1) + geom_point(size=2, stroke=1) + 
+    theme(legend.title = element_blank())
+  # Adjust axis label
+  if ( input$casecount == 'Daily' ){
+    gg <- gg + ylab(paste('Daily Cases: ', input$casetype))
+  } else if (input$casecount == 'Total') {
+    gg <- gg + ylab(paste('Total Cases: ', input$casetype))
+  }
+  # Adgust log scale
+  if(input$scale == 'log'){
+    gg <- gg + scale_y_log10() 
+  }
+  # Done
+  gg
 })
 
 renderPlotly({g_daily()})
 
 ```
 
-```{r}
-#Growth
-#=====================================  
-#
-#Column {.sidebar}
-#-----------------------------------------------------------------------
+Summary
+=====================================  
 
-## Time series with number fo confirmed case per country
-#time_series_19_covid_country <- time_series_19_covid %>% 
-#  select(c('Date', 'Country/Region', 'Case type', 'Cases')) %>% 
-#  group_by(`Date`, `Country/Region`, `Case type`) %>% 
-#  summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`)
-#
-#dateRangeInput("daterange", "Date range:",
-#                start = max(time_series_19_covid_country$Date)-20,
-#                end   = max(time_series_19_covid_country$Date))
-#
-#selectInput("casetype", "Select case type:",
-#      c('Confirmed', 'Recovered', 'Deaths'),
-#      selected='Confirmed',
-#      multiple=FALSE
-#    )
-#
-#selectInput("country", "Select country:",
-#       unique(data_summary_per_country %>% arrange(desc(Confirmed)) %>% #select(`Country/Region`)),
-#      selected=c('Italy', 'France', 'Switzerland'),
-#      multiple=TRUE
-#    )
-#
+Row
+-------------------------------------
+
+###
+
+```{r}
+tab <- data_summary_per_country %>% select(c('Country/Region', 
+                                             'Population', 
+                                             'Confirmed', 
+                                             'Deaths'))
+
+tab$Population = format(tab$Population, format="d", big.mark="'")
+tab$Confirmed = format(tab$Confirmed, format="d", big.mark="'")
+tab$Deaths = format(tab$Deaths, format="d", big.mark="'")
+
+DT::renderDataTable( DT::datatable(tab, 
+                                   selection = 'single', 
+                                   options = list(paging = FALSE, scrollY="75vh", 
+                                                  columnDefs = list(
+                                                    list(
+                                                      className = 'dt-right', targets = 2:4
+                                                      )
+                                                    )
+                                                  )
+                                   )
+                     )
+
 ```
 
-
 ```{r}
-#Column
-#-----------------------------------------------------------------------
+# Reactive based on the row selected in the previous table
+#g <- reactive({
 #
-####
-#
-#g_growth <- reactive({
-#
-#  time_series_19_covid_country %>% filter(`Country/Region` %in% input$country) %>% #filter(`Case type` == input$casetype) %>% filter(Date >= input$daterange[1] & Date <= #input$daterange[2] ) %>% ggplot(aes(x=Date, y=`Total Cases`, color=`Country/Region`)) + #geom_point(shape = 21, size=3, stroke=1) + ylab(paste('Total Cases: ', input$casetype)) #+  theme(legend.title = element_blank()) + geom_smooth(method="nls", formula=y ~ #exp(a+b*(x-min(x))), method.args = list(start=list(a=1,b=1)), se=FALSE, fullrange=TRUE) #+ xlim(input$daterange[1],input$daterange[2]+2) 
+#    if ( is_null(input$tab_rows_selected) ){
+#      tmp <- time_series_19_covid_country %>% group_by(`Date`, `Case type`) %>% summarise(`Total #Cases` = sum(`Total Cases`))
+#    } else {
+#      filter_country <- tab[input$tab_rows_selected, ]$`Country/Region`
+#      tmp <- time_series_19_covid_country %>% filter(`Country/Region` == filter_country)
+#    }
 #  
+#    tmp %>% ggplot(aes(x=Date, y=`Total Cases`, color=`Case type`)) + geom_line() + #geom_point(size=2) + ylab("") + scale_color_manual(values=c("#f39c12", "red", "#52be80")) + #theme(legend.title = element_blank(), legend.position = "none") + facet_grid(rows = vars(`Case #type`), scales='free_y')
+#    
 #})
 #
-#renderPlotly({g_growth()})
+#renderPlotly({g()})
+#
 #
 ```
-
-

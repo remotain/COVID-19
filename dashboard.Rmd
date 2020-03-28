@@ -10,10 +10,6 @@ output:
 runtime: shiny
 ---
 
-```{bash, include=FALSE}
-cd DATA && git pull
-```
-
 ```{r global, include=FALSE}
 #knitr::opts_chunk$set(echo = TRUE)
 library(flexdashboard)
@@ -21,8 +17,11 @@ library(tidyverse)
 library(plotly)
 library(leaflet)
 library(maps)
+#```{bash, include=FALSE}
+#cd DATA && git pull
+#```
 #
-setwd("~/Work/COVID-19/")
+#setwd("/Users/alberto/Work/COVID-19/")
 #
 # Load Data Set for confirmed Cases
 time_series_19_covid_Confirmed <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
@@ -119,6 +118,25 @@ time_series_19_covid_country <- time_series_19_covid %>%
   summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`) %>%
   left_join(., country_coords, by = c("Country/Region"="country"))
 
+summary_country <- time_series_19_covid_country %>%
+  filter(Date == max(time_series_19_covid_country$Date)) %>% 
+  pivot_wider(names_from = `Case type`, values_from = `Total Cases`)  %>%
+  select(c('Country/Region', 'Population', 'Confirmed', 'Deaths')) %>% arrange(desc(`Confirmed`))
+
+summary_totals <- time_series_19_covid %>% group_by(`Date`, `Case type`) %>% summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`) %>% ungroup()
+
+data_summary_per_country <- time_series_19_covid_country %>% 
+    pivot_wider(names_from = `Case type`, values_from = `Total Cases`) 
+  
+data_summary_per_country_norm <- data_summary_per_country %>% mutate(`Confirmed` = 100000 * `Confirmed` / `Population`) 
+data_summary_per_country_norm <- data_summary_per_country %>% mutate(`Deaths` = 100000 * `Deaths` / `Population`)
+
+data_summary_per_country_daily <- time_series_19_covid_country_daily %>% 
+    pivot_wider(names_from = `Case type`, values_from = `Total Cases`)
+  
+data_summary_per_country_daily_norm <- data_summary_per_country_daily %>% mutate(`Confirmed` = 100000 * `Confirmed` / `Population`) 
+data_summary_per_country_daily_norm <- data_summary_per_country_daily %>% mutate(`Deaths` = 100000 * `Deaths` / `Population`)
+
 ```
 
 Sidebar {.sidebar}
@@ -153,8 +171,7 @@ selectInput("casetype", "Select Case type:",
     )
 
 selectInput("country", "Select Countries:",
-       unique(data_summary_per_country %>% arrange(desc(Confirmed)) %>% 
-                select(`Country/Region`)),
+       unique(summary_country$`Country/Region`),
       selected=c('Italy', 'France', 'Switzerland'),
       multiple=TRUE
     )
@@ -169,15 +186,15 @@ Row
 
 ```{r}
 # Summary totals
-summary_totals <- reactive({
-  time_series_19_covid %>% filter(Date == input$daterange) %>% group_by(`Case type`) %>% summarize(sum(Cases))
+summary_totals_selected_date <- reactive({
+  summary_totals %>% filter(Date == input$daterange)
 })
 ```
   
 ### Confirmed
 ```{r}
 renderValueBox({
-  valueBox(summary_totals() %>% filter(`Case type` == "Confirmed") %>% select(`sum(Cases)`), 
+  valueBox(summary_totals_selected_date() %>% filter(`Case type` == "Confirmed") %>% select(`Total Cases`), 
            icon = "fa-stethoscope", color="#f39c12")
 })
 ```
@@ -185,7 +202,7 @@ renderValueBox({
 ### Deaths
 ```{r}
 renderValueBox({
-  valueBox(summary_totals() %>% filter(`Case type` == "Deaths") %>% select(`sum(Cases)`), 
+  valueBox(summary_totals_selected_date() %>% filter(`Case type` == "Deaths") %>% select(`Total Cases`), 
            icon = "fa-sad-tear", color='red')
 })  
 ```
@@ -197,23 +214,25 @@ Row
 ```{r}
 
 m <- reactive({
+  
   # Grab relevant dataframe
   if(input$casecount == 'Total'){
-    data_summary_per_country <- time_series_19_covid_country
-  } else if(input$casecount == 'Daily'){
-    data_summary_per_country <- time_series_19_covid_country_daily
-  }
-  # Filter and transform
-  data_summary_per_country <- data_summary_per_country %>%
-    filter(Date == input$daterange) %>% 
-    pivot_wider(names_from = `Case type`, values_from = `Total Cases`) 
-  # Normalize if required
-  if(input$norm){
-      data_summary_per_country <- data_summary_per_country %>% mutate(`Confirmed` = 100000 * `Confirmed` / `Population`)
-      data_summary_per_country <- data_summary_per_country %>% mutate(`Deaths` = 100000 * `Deaths` / `Population`)
+    if(input$norm){
+       data <- data_summary_per_country_norm
+    } else {
+      data <- data_summary_per_country
     }
+  } else if(input$casecount == 'Daily'){
+    if(input$norm){
+       data <- data_summary_per_country_daily_norm
+    } else {
+      data <- data_summary_per_country_daily
+    }
+  }
+  # Filter
+  data <- data %>% filter(Date == input$daterange)
   # Popup text
-  mytext <- paste("Country: ", data_summary_per_country$`Country/Region`, "<br/>", "Population: ", format(data_summary_per_country$`Population`, format="d", big.mark="'"), "<br/>", "Confirmed: ", sprintf("%.2f", data_summary_per_country$`Confirmed`), "<br/>", "Deaths: ", sprintf("%.2f", data_summary_per_country$`Deaths`), sep="") %>%
+  mytext <- paste("Country: ", data$`Country/Region`, "<br/>", "Population: ", format(data$`Population`, format="d", big.mark="'"), "<br/>", "Confirmed: ", sprintf("%.2f", data$`Confirmed`), "<br/>", "Deaths: ", sprintf("%.2f", data$`Deaths`), sep="") %>%
   lapply(htmltools::HTML)
     
   if(input$casetype == 'Confirmed'){
@@ -222,7 +241,7 @@ m <- reactive({
     c <- "red"
   }
   
-  data_summary_per_country %>% 
+  data %>% 
     rename(counts = input$casetype) %>% 
     leaflet() %>% addTiles() %>%
   addProviderTiles("OpenStreetMap.Mapnik") %>%
@@ -293,21 +312,43 @@ Row
 ###
 
 ```{r}
-tab <- data_summary_per_country %>% select(c('Country/Region', 
-                                             'Population', 
-                                             'Confirmed', 
-                                             'Deaths'))
+t <- reactive({
+  # Grab relevant dataframe
+  if(input$casecount == 'Total'){
+    if(input$norm){
+       data <- data_summary_per_country_norm
+    } else {
+      data <- data_summary_per_country
+    }
+  } else if(input$casecount == 'Daily'){
+    if(input$norm){
+       data <- data_summary_per_country_daily_norm
+    } else {
+      data <- data_summary_per_country_daily
+    }
+  }
+  
+  # Filter
+  data <- data %>% filter(Date == input$daterange) %>% select(c(`Country/Region`, `Population`, `Confirmed`, `Deaths`)) %>% arrange(desc(`Confirmed`)) %>% ungroup()
+  
+  data <- data %>% mutate( `Population` = format(`Population`, format="d", big.mark="'"))
+  
+  if(input$norm){
+      data <- data %>% mutate( `Confirmed` = format(round(data$Confirmed,2), format="d", big.mark="'", nsmall=2))
+      data <- data %>% mutate( `Deaths` = format(round(data$Deaths,2), format="d", big.mark="'", nsmall=2))
+    } else {
+      data <- data %>% mutate( `Confirmed` = format(round(data$Confirmed,2), format="d", big.mark="'", nsmall=0))
+      data <- data %>% mutate( `Deaths` = format(round(data$Deaths,2), format="d", big.mark="'", nsmall=0))
+    }
+  
+})
 
-tab$Population = format(tab$Population, format="d", big.mark="'")
-tab$Confirmed = format(tab$Confirmed, format="d", big.mark="'")
-tab$Deaths = format(tab$Deaths, format="d", big.mark="'")
-
-DT::renderDataTable( DT::datatable(tab, 
+DT::renderDataTable( DT::datatable(t(), 
                                    selection = 'single', 
                                    options = list(paging = FALSE, scrollY="75vh", 
                                                   columnDefs = list(
                                                     list(
-                                                      className = 'dt-right', targets = 2:4
+                                                      className = 'dt-right', targets = 3:5
                                                       )
                                                     )
                                                   )

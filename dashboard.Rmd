@@ -17,6 +17,7 @@ library(tidyverse)
 library(plotly)
 library(leaflet)
 library(maps)
+library(readr)
 #```{bash, include=FALSE}
 #cd DATA && git pull
 #```
@@ -24,7 +25,11 @@ library(maps)
 #setwd("/Users/alberto/Work/COVID-19/")
 #
 # Load Data Set for confirmed Cases
-time_series_19_covid_Confirmed <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+#time_series_19_covid_Confirmed <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+
+url_file <- "https://github.com/CSSEGISandData/COVID-19/raw/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+time_series_19_covid_Confirmed <- read_csv(url_file)
+
 # Tidy data
 time_series_19_covid_Confirmed <- time_series_19_covid_Confirmed %>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
 # Add Features
@@ -32,17 +37,21 @@ time_series_19_covid_Confirmed <- time_series_19_covid_Confirmed %>% mutate(`Cas
 #
 #
 # Load Data Set for Recovered Cases
-# NO LONGER UPDATED IN THE REPOSITORIES 23/03/2020
 #
-#time_series_19_covid_Recovered <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv")
+url_file <- "https://github.com/CSSEGISandData/COVID-19/raw/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv"
+time_series_19_covid_Recovered <- read_csv(url_file)
+
 # Tidy data
-#time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
+time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
 # Add Features
-#time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% mutate(`Case type` = "Recovered")
+time_series_19_covid_Recovered <- time_series_19_covid_Recovered %>% mutate(`Case type`= "Recovered")
 #
 #
 # Load Data Set for Deaths Cases
-time_series_19_covid_Deaths <- read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+#time_series_19_covid_Deaths <- #read_csv("DATA/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+url_file <- "https://github.com/CSSEGISandData/COVID-19/raw/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
+time_series_19_covid_Deaths <- read_csv(url_file)
+
 # Tidy data
 time_series_19_covid_Deaths<- time_series_19_covid_Deaths%>% pivot_longer(cols=c(-`Province/State`, -`Country/Region`, -Lat, -Long), names_to="Date", values_to="Cases" )
 # Add Features
@@ -50,7 +59,7 @@ time_series_19_covid_Deaths <- time_series_19_covid_Deaths %>% mutate(`Case type
 #
 #
 # Merge Confirmed, Deaths
-time_series_19_covid <- bind_rows(time_series_19_covid_Confirmed ,time_series_19_covid_Deaths ) %>% mutate(Date = as.Date(Date, format = '%m/%d/%y'))
+time_series_19_covid <- bind_rows(time_series_19_covid_Confirmed, time_series_19_covid_Recovered ,time_series_19_covid_Deaths ) %>% mutate(Date = as.Date(Date, format = '%m/%d/%y'))
 #
 #
 # Change US to USA
@@ -121,7 +130,7 @@ time_series_19_covid_country <- time_series_19_covid %>%
 summary_country <- time_series_19_covid_country %>%
   filter(Date == max(time_series_19_covid_country$Date)) %>% 
   pivot_wider(names_from = `Case type`, values_from = `Total Cases`)  %>%
-  select(c('Country/Region', 'Population', 'Confirmed', 'Deaths')) %>% arrange(desc(`Confirmed`))
+  select(c('Country/Region', 'Population', 'Confirmed', 'Recovered', 'Deaths')) %>% arrange(desc(`Confirmed`))
 
 summary_totals <- time_series_19_covid %>% group_by(`Date`, `Case type`) %>% summarize(sum(Cases)) %>% rename(`Total Cases`=`sum(Cases)`) %>% ungroup()
 
@@ -194,15 +203,23 @@ summary_totals_selected_date <- reactive({
 ### Confirmed
 ```{r}
 renderValueBox({
-  valueBox(summary_totals_selected_date() %>% filter(`Case type` == "Confirmed") %>% select(`Total Cases`), 
+  valueBox(summary_totals_selected_date() %>% filter(`Case type` == "Confirmed") %>% select(`Total Cases`) %>% mutate(`Total Cases` = format(`Total Cases`, format="d", big.mark="'")), 
            icon = "fa-stethoscope", color="#f39c12")
+})
+```
+
+### Recovered
+```{r}
+renderValueBox({
+  valueBox(summary_totals_selected_date() %>% filter(`Case type` == "Recovered") %>% select(`Total Cases`)%>% mutate(`Total Cases` = format(`Total Cases`, format="d", big.mark="'")), 
+           icon = "fa-smile", color="green")
 })
 ```
 
 ### Deaths
 ```{r}
 renderValueBox({
-  valueBox(summary_totals_selected_date() %>% filter(`Case type` == "Deaths") %>% select(`Total Cases`), 
+  valueBox(summary_totals_selected_date() %>% filter(`Case type` == "Deaths") %>% select(`Total Cases`) %>% mutate(`Total Cases` = format(`Total Cases`, format="d", big.mark="'")), 
            icon = "fa-sad-tear", color='red')
 })  
 ```
@@ -232,12 +249,14 @@ m <- reactive({
   # Filter
   data <- data %>% filter(Date == input$daterange)
   # Popup text
-  mytext <- paste("Country: ", data$`Country/Region`, "<br/>", "Population: ", format(data$`Population`, format="d", big.mark="'"), "<br/>", "Confirmed: ", sprintf("%.2f", data$`Confirmed`), "<br/>", "Deaths: ", sprintf("%.2f", data$`Deaths`), sep="") %>%
+  mytext <- paste("Country: ", data$`Country/Region`, "<br/>", "Population: ", format(data$`Population`, format="d", big.mark="'"), "<br/>", "Confirmed: ", sprintf("%.2f", data$`Confirmed`), "<br/>", "Recovered: ", sprintf("%.2f", data$`Recovered`), "<br/>", "Deaths: ", sprintf("%.2f", data$`Deaths`), sep="") %>%
   lapply(htmltools::HTML)
     
   if(input$casetype == 'Confirmed'){
     c <- "#f39c12"
-  } else {
+  } else if(input$casetype == 'Recovered') {
+    c <- "green"
+  } else if(input$casetype == 'Deaths') {
     c <- "red"
   }
   
@@ -329,15 +348,17 @@ t <- reactive({
   }
   
   # Filter
-  data <- data %>% filter(Date == input$daterange) %>% select(c(`Country/Region`, `Population`, `Confirmed`, `Deaths`)) %>% arrange(desc(`Confirmed`)) %>% ungroup()
+  data <- data %>% filter(Date == input$daterange) %>% select(c(`Country/Region`, `Population`, `Confirmed`, `Recovered`, `Deaths`)) %>% arrange(desc(`Confirmed`)) %>% ungroup()
   
   data <- data %>% mutate( `Population` = format(`Population`, format="d", big.mark="'"))
   
   if(input$norm){
       data <- data %>% mutate( `Confirmed` = format(round(data$Confirmed,2), format="d", big.mark="'", nsmall=2))
+      data <- data %>% mutate( `Recovered` = format(round(data$Recovered,2), format="d", big.mark="'", nsmall=2))
       data <- data %>% mutate( `Deaths` = format(round(data$Deaths,2), format="d", big.mark="'", nsmall=2))
     } else {
       data <- data %>% mutate( `Confirmed` = format(round(data$Confirmed,2), format="d", big.mark="'", nsmall=0))
+      data <- data %>% mutate( `Recovered` = format(round(data$Recovered,2), format="d", big.mark="'", nsmall=0))
       data <- data %>% mutate( `Deaths` = format(round(data$Deaths,2), format="d", big.mark="'", nsmall=0))
     }
   
@@ -348,31 +369,11 @@ DT::renderDataTable( DT::datatable(t(),
                                    options = list(paging = FALSE, scrollY="75vh", 
                                                   columnDefs = list(
                                                     list(
-                                                      className = 'dt-right', targets = 3:5
+                                                      className = 'dt-right', targets = 3:6
                                                       )
                                                     )
                                                   )
                                    )
                      )
 
-```
-
-```{r}
-# Reactive based on the row selected in the previous table
-#g <- reactive({
-#
-#    if ( is_null(input$tab_rows_selected) ){
-#      tmp <- time_series_19_covid_country %>% group_by(`Date`, `Case type`) %>% summarise(`Total #Cases` = sum(`Total Cases`))
-#    } else {
-#      filter_country <- tab[input$tab_rows_selected, ]$`Country/Region`
-#      tmp <- time_series_19_covid_country %>% filter(`Country/Region` == filter_country)
-#    }
-#  
-#    tmp %>% ggplot(aes(x=Date, y=`Total Cases`, color=`Case type`)) + geom_line() + #geom_point(size=2) + ylab("") + scale_color_manual(values=c("#f39c12", "red", "#52be80")) + #theme(legend.title = element_blank(), legend.position = "none") + facet_grid(rows = vars(`Case #type`), scales='free_y')
-#    
-#})
-#
-#renderPlotly({g()})
-#
-#
 ```

@@ -6,7 +6,7 @@ output:
     theme: bootstrap
     orientation: rows
     navbar:
-      - { title: "Data Source", href: "https://github.com/CSSEGISandData/COVID-19", icon: "fa-github", align: right }
+      - { title: "Data Source", href: "https://github.com/remotain/COVID-19", icon: "fa-github", align: right }
 runtime: shiny
 ---
 

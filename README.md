@@ -2,7 +2,7 @@
 
 This project provides an automated and interactive dashboard to monitor the worldwide evolution of the COVID-19 pandemic.
 
-The dashboard my be explored [here](https://aremoto.shinyapps.io/COVID19/).
+The dashboard may be explored [here](https://aremoto.shinyapps.io/COVID19/).
 
 ## Data source
 

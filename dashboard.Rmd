@@ -249,7 +249,7 @@ m <- reactive({
   # Filter
   data <- data %>% filter(Date == input$daterange)
   # Popup text
-  mytext <- paste("Country: ", data$`Country/Region`, "<br/>", "Population: ", format(data$`Population`, format="d", big.mark="'"), "<br/>", "Confirmed: ", sprintf("%.2f", data$`Confirmed`), "<br/>", "Recovered: ", sprintf("%.2f", data$`Recovered`), "<br/>", "Deaths: ", sprintf("%.2f", data$`Deaths`), sep="") %>%
+  mytext <- paste("Country: ", data$`Country/Region`, "<br/>", "Population: ", format(data$`Population`, format="d", big.mark="'"), "<br/>", "Confirmed: ", format(data$`Confirmed`, format="d", big.mark="'"), "<br/>", "Recovered: ", format(data$`Recovered`, format="d", big.mark="'"), "<br/>", "Deaths: ", format(data$`Deaths`, format="d", big.mark="'") ) %>%
   lapply(htmltools::HTML)
     
   if(input$casetype == 'Confirmed'){
